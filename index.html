@@ -84,6 +84,26 @@
   #yes-btn{ left:20px; background:var(--pink); color:#fff; transition:transform .2s; }
   #no-btn{ right:20px; background:#333; color:#fff; transition:left .15s ease, top .15s ease; }
 
+  .summary{ display:flex; flex-direction:column; align-items:center; gap:5px; margin:0 auto 26px; }
+  .srow{ display:flex; gap:5px; justify-content:center; }
+  .stile{
+    width:min(42px,11vw); height:min(42px,11vw);
+    border:2px solid var(--absent); background:var(--absent);
+    display:flex; align-items:center; justify-content:center;
+    font-size:min(21px,5.5vw); font-weight:700; color:#fff;
+  }
+  .stile.correct{ background:var(--correct); border-color:var(--correct); }
+  .stile.present{ background:var(--present); border-color:var(--present); }
+  .stile.absent{ background:var(--absent); border-color:var(--absent); }
+  .srow.hero{ gap:7px; margin-top:14px; }
+  .srow.hero .stile{
+    width:min(58px,14vw); height:min(58px,14vw); font-size:min(32px,8vw);
+    border-color:#6fbf68; box-shadow:0 0 16px rgba(106,190,98,.7);
+    animation:heroPop .6s ease both, glow 1.8s ease-in-out infinite;
+  }
+  @keyframes heroPop{ 0%{ transform:scale(.2) rotate(-12deg); opacity:0; } 70%{ transform:scale(1.18) rotate(3deg); opacity:1; } 100%{ transform:scale(1) rotate(0); opacity:1; } }
+  @keyframes glow{ 0%,100%{ box-shadow:0 0 12px rgba(106,190,98,.55); } 50%{ box-shadow:0 0 30px rgba(130,220,120,1); } }
+
   .celebration-content{ text-align:center; position:relative; z-index:2; }
   .celebration-content h1{ font-size:clamp(28px,8vw,46px); margin-bottom:12px; font-weight:700; }
   .celebration-content p{ font-size:clamp(14px,4vw,18px); opacity:.85; max-width:400px; margin:0 auto 30px;}
@@ -103,6 +123,7 @@
 
 <div class="overlay" id="proposal-overlay">
   <div class="proposal-content">
+    <div class="summary" id="summary-proposal"></div>
     <h1>Will you marry me? &#128141;</h1>
     <div class="proposal-buttons-area">
       <button class="big-btn" id="yes-btn">Yes</button>
@@ -113,6 +134,7 @@
 
 <div class="overlay" id="celebration-overlay">
   <div class="celebration-content">
+    <div class="summary" id="summary-celebrate"></div>
     <h1>She said YES! &#128150;</h1>
     <p>Best Wordle guess of my life.</p>
     <button class="replay" id="replay-btn">&#8635; play again</button>
@@ -350,6 +372,7 @@
 
   yesBtn.addEventListener('click', function(){
     proposalOverlay.classList.remove('show');
+    renderSummary(document.getElementById('summary-celebrate'));
     celebrationOverlay.classList.add('show');
     startConfetti();
   });
@@ -375,7 +398,29 @@
     location.reload();
   });
 
+  // Replays the message on the ending screens: WILLU / BEMY? / BRIDE
+  function renderSummary(container){
+    container.innerHTML = '';
+    ['WILLU','BEMY?','BRIDE'].forEach(function(word, r){
+      var colors = getColors(word, ANSWER);
+      var rowEl = document.createElement('div');
+      rowEl.className = 'srow' + (r===2 ? ' hero' : '');
+      word.split('').forEach(function(ch, i){
+        var t = document.createElement('div');
+        t.className = 'stile ' + colors[i];
+        t.textContent = ch;
+        if(r===2){
+          var d = 0.35 + i*0.15;
+          t.style.animationDelay = d + 's,' + (d+0.6) + 's';
+        }
+        rowEl.appendChild(t);
+      });
+      container.appendChild(rowEl);
+    });
+  }
+
   function showProposal(){
+    renderSummary(document.getElementById('summary-proposal'));
     proposalOverlay.classList.add('show');
   }
 
