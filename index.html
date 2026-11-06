@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>Wordle</title>
+<meta name="robots" content="noindex, nofollow" />
+<style>
+  :root{
+    --bg:#121213;
+    --tile-border:#3a3a3c;
+    --tile-border-filled:#565758;
+    --text:#ffffff;
+    --correct:#538d4e;
+    --present:#b59f3b;
+    --absent:#3a3a3c;
+    --key-bg:#818384;
+    --key-text:#ffffff;
+    --pink:#ff6b9d;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{
+    margin:0; padding:0; min-height:100%; background:var(--bg); color:var(--text);
+    font-family:'Helvetica Neue',Arial,sans-serif; overscroll-behavior:none; touch-action:manipulation;
+  }
+  #app{ display:flex; flex-direction:column; align-items:center; min-height:100vh; min-height:100svh; padding-top:env(safe-area-inset-top); padding-bottom:calc(16px + env(safe-area-inset-bottom)); padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); }
+  header{ width:100%; max-width:500px; text-align:center; border-bottom:1px solid var(--tile-border); padding:14px 0; margin-bottom:10px; }
+  header h1{ margin:0; font-size:28px; letter-spacing:3px; font-weight:700; }
+  header h1 .heart{ color:var(--pink); font-size:18px; vertical-align:middle; }
+
+  #toast{ position:fixed; top:70px; left:50%; transform:translateX(-50%) translateY(-10px); background:#fff; color:#000; padding:10px 16px; border-radius:6px; font-weight:600; font-size:14px; opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; z-index:50; white-space:nowrap;}
+  #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  .board{ display:flex; flex-direction:column; gap:5px; margin:10px auto 22px; }
+  .row{ display:flex; gap:5px; justify-content:center; }
+  .row.shake{ animation:shake .5s; }
+  @keyframes shake{ 10%,90%{transform:translateX(-2px);} 20%,80%{transform:translateX(4px);} 30%,50%,70%{transform:translateX(-8px);} 40%,60%{transform:translateX(8px);} }
+
+  .tile{
+    width:min(58px,15vw); height:min(58px,15vw);
+    border:2px solid var(--tile-border);
+    display:flex; align-items:center; justify-content:center;
+    font-size:min(28px,6.5vw); font-weight:700; text-transform:uppercase;
+    color:var(--text);
+  }
+  .tile.filled{ border-color:var(--tile-border-filled); }
+  .tile.pop{ animation:pop .1s; }
+  @keyframes pop{ 0%{transform:scale(1);} 50%{transform:scale(1.08);} 100%{transform:scale(1);} }
+  .tile.flip{ animation:flip .6s ease; }
+  @keyframes flip{ 0%{transform:rotateX(0);} 50%{transform:rotateX(90deg);} 100%{transform:rotateX(0);} }
+  .tile.correct{ background:var(--correct); border-color:var(--correct); }
+  .tile.present{ background:var(--present); border-color:var(--present); }
+  .tile.absent{ background:var(--absent); border-color:var(--absent); }
+
+  #keyboard{ display:flex; flex-direction:column; gap:8px; width:100%; max-width:500px; padding:0 8px; }
+  .kb-row{ display:flex; gap:6px; justify-content:center; }
+  .key{
+    flex:1; min-width:0; max-width:43px; height:50px;
+    background:var(--key-bg); color:var(--key-text);
+    border:none; border-radius:4px; font-weight:700; font-size:13px;
+    display:flex; align-items:center; justify-content:center; cursor:pointer; user-select:none;
+    -webkit-touch-callout:none; touch-action:manipulation;
+  }
+  .key.wide{ max-width:65px; font-size:11px; }
+  .key.correct{ background:var(--correct); }
+  .key.present{ background:var(--present); }
+  .key.absent{ background:#5a5a5c; opacity:.6; }
+
+  .overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,0.93);
+    display:flex; align-items:center; justify-content:center; overflow:hidden;
+    opacity:0; pointer-events:none; transition:opacity .4s; z-index:100; padding:20px;
+  }
+  .overlay.show{ opacity:1; pointer-events:auto; }
+
+  .proposal-content{ text-align:center; max-width:420px; }
+  .proposal-content h1{ font-size:clamp(24px,7vw,38px); margin-bottom:34px; line-height:1.3; font-weight:700; }
+  .proposal-buttons-area{ position:relative; width:280px; height:160px; margin:0 auto; }
+  .big-btn{
+    position:absolute; top:50%; transform:translateY(-50%); padding:16px 32px;
+    font-size:18px; font-weight:700; border:none; border-radius:40px; cursor:pointer;
+    user-select:none; -webkit-touch-callout:none; touch-action:manipulation;
+  }
+  #yes-btn{ left:20px; background:var(--pink); color:#fff; transition:transform .2s; }
+  #no-btn{ right:20px; background:#333; color:#fff; transition:left .15s ease, top .15s ease; }
+
+  .celebration-content{ text-align:center; position:relative; z-index:2; }
+  .celebration-content h1{ font-size:clamp(28px,8vw,46px); margin-bottom:12px; font-weight:700; }
+  .celebration-content p{ font-size:clamp(14px,4vw,18px); opacity:.85; max-width:400px; margin:0 auto 30px;}
+  .replay{ background:none; border:1px solid #555; color:#aaa; padding:8px 16px; border-radius:20px; font-size:13px; cursor:pointer; }
+  .falling-heart{ position:absolute; top:-40px; pointer-events:none; animation:fall linear forwards; z-index:1; }
+  @keyframes fall{ to{ transform:translateY(115vh) rotate(360deg); opacity:.7; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <header><h1>WORDLE <span class="heart">&#9829;</span></h1></header>
+  <div class="board" id="board"></div>
+  <div id="keyboard"></div>
+</div>
+
+<div id="toast"></div>
+
+<div class="overlay" id="proposal-overlay">
+  <div class="proposal-content">
+    <h1>Will you marry me? &#128141;</h1>
+    <div class="proposal-buttons-area">
+      <button class="big-btn" id="yes-btn">Yes</button>
+      <button class="big-btn" id="no-btn">No</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="celebration-overlay">
+  <div class="celebration-content">
+    <h1>She said YES! &#128150;</h1>
+    <p>Best Wordle guess of my life.</p>
+    <button class="replay" id="replay-btn">&#8635; play again</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  var ANSWER = "BRIDE";
+  var KB_ROWS = [
+    ["Q","W","E","R","T","Y","U","I","O","P"],
+    ["A","S","D","F","G","H","J","K","L"],
+    ["ENTER","Z","X","C","V","B","N","M","BACK"]
+  ];
+  var PRELOADED = [
+    ["W","I","L","L","U"],
+    ["B","E","M","Y","?"]
+  ];
+
+  var currentRow = 0;
+  var currentGuess = "";
+  var inputEnabled = false;
+  var gameOver = false;
+
+  var boardEl = document.getElementById('board');
+  var keyboardEl = document.getElementById('keyboard');
+  var toastEl = document.getElementById('toast');
+
+  function buildBoard(){
+    for(var r=0;r<6;r++){
+      var rowEl = document.createElement('div');
+      rowEl.className='row';
+      rowEl.dataset.row=r;
+      for(var c=0;c<5;c++){
+        var tile=document.createElement('div');
+        tile.className='tile';
+        tile.dataset.row=r;
+        tile.dataset.col=c;
+        rowEl.appendChild(tile);
+      }
+      boardEl.appendChild(rowEl);
+    }
+  }
+
+  function buildKeyboard(){
+    KB_ROWS.forEach(function(row){
+      var rowEl=document.createElement('div');
+      rowEl.className='kb-row';
+      row.forEach(function(k){
+        var btn=document.createElement('button');
+        btn.className='key';
+        btn.dataset.key=k;
+        if(k==='ENTER'||k==='BACK') btn.classList.add('wide');
+        btn.textContent = k==='BACK' ? '⌫' : (k==='ENTER' ? 'ENTER' : k);
+        btn.addEventListener('click', function(){ handleKey(this.dataset.key); });
+        rowEl.appendChild(btn);
+      });
+      keyboardEl.appendChild(rowEl);
+    });
+  }
+
+  function getTile(r,c){
+    return document.querySelector('.tile[data-row="'+r+'"][data-col="'+c+'"]');
+  }
+
+  function getColors(guess, answer){
+    var g = guess.split('');
+    var a = answer.split('');
+    var result = ['absent','absent','absent','absent','absent'];
+    var consumed = [false,false,false,false,false];
+    var i, j;
+    for(i=0;i<5;i++){
+      if(g[i]===a[i]){ result[i]='correct'; consumed[i]=true; }
+    }
+    for(i=0;i<5;i++){
+      if(result[i]==='correct') continue;
+      var idx=-1;
+      for(j=0;j<5;j++){
+        if(!consumed[j] && a[j]===g[i]){ idx=j; break; }
+      }
+      if(idx!==-1){ result[i]='present'; consumed[idx]=true; }
+    }
+    return result;
+  }
+
+  var PRIORITY = { correct:3, present:2, absent:1 };
+  function updateKeyboardColor(letter, color){
+    var key = document.querySelector('.key[data-key="'+letter+'"]');
+    if(!key) return;
+    var current = key.dataset.state || null;
+    var curP = current ? PRIORITY[current] : 0;
+    if(PRIORITY[color] > curP){
+      if(current) key.classList.remove(current);
+      key.classList.add(color);
+      key.dataset.state = color;
+    }
+  }
+
+  function sleep(ms){ return new Promise(function(res){ setTimeout(res,ms); }); }
+
+  function revealRow(rowIndex, letters){
+    return new Promise(function(resolve){
+      var colors = getColors(letters.join(''), ANSWER);
+      var STAGGER = 380;
+      var FLIP_HALF = 300;
+      letters.forEach(function(letter,i){
+        var tile = getTile(rowIndex,i);
+        tile.textContent = letter;
+        tile.classList.add('filled');
+        setTimeout(function(){
+          tile.classList.add('flip');
+          setTimeout(function(){
+            tile.classList.add(colors[i]);
+            if(/^[A-Z]$/.test(letter)) updateKeyboardColor(letter, colors[i]);
+          }, FLIP_HALF);
+        }, i*STAGGER);
+      });
+      setTimeout(resolve, 4*STAGGER + 650);
+    });
+  }
+
+  function showToast(msg, duration){
+    duration = duration || 1500;
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    setTimeout(function(){ toastEl.classList.remove('show'); }, duration);
+  }
+
+  function shakeRow(r){
+    var rowEl = document.querySelector('.row[data-row="'+r+'"]');
+    rowEl.classList.add('shake');
+    setTimeout(function(){ rowEl.classList.remove('shake'); }, 500);
+  }
+
+  function addLetter(letter){
+    if(currentGuess.length>=5) return;
+    currentGuess += letter;
+    var tile = getTile(currentRow, currentGuess.length-1);
+    tile.textContent = letter;
+    tile.classList.add('filled','pop');
+  }
+
+  function removeLetter(){
+    if(currentGuess.length<=0) return;
+    var tile = getTile(currentRow, currentGuess.length-1);
+    tile.textContent = '';
+    tile.classList.remove('filled','pop');
+    currentGuess = currentGuess.slice(0,-1);
+  }
+
+  function submitGuess(){
+    if(currentGuess.length<5){
+      shakeRow(currentRow);
+      showToast('Not enough letters');
+      return;
+    }
+    inputEnabled = false;
+    var letters = currentGuess.split('');
+    var guessWord = currentGuess;
+    revealRow(currentRow, letters).then(function(){
+      if(guessWord===ANSWER){
+        gameOver = true;
+        setTimeout(showProposal, 900);
+      } else if(currentRow>=5){
+        gameOver = true;
+        showToast('The word was ' + ANSWER + ' 💍', 1800);
+        setTimeout(showProposal, 2000);
+      } else {
+        currentRow++;
+        currentGuess='';
+        inputEnabled = true;
+      }
+    });
+  }
+
+  function handleKey(k){
+    if(!inputEnabled || gameOver) return;
+    if(k==='ENTER') submitGuess();
+    else if(k==='BACK') removeLetter();
+    else if(/^[A-Z]$/.test(k)) addLetter(k);
+  }
+
+  document.addEventListener('keydown', function(e){
+    if(!inputEnabled || gameOver) return;
+    if(e.key==='Enter') handleKey('ENTER');
+    else if(e.key==='Backspace') handleKey('BACK');
+    else if(/^[a-zA-Z]$/.test(e.key)) handleKey(e.key.toUpperCase());
+  });
+
+  // Proposal overlay logic
+  var proposalOverlay = document.getElementById('proposal-overlay');
+  var celebrationOverlay = document.getElementById('celebration-overlay');
+  var yesBtn = document.getElementById('yes-btn');
+  var noBtn = document.getElementById('no-btn');
+  var yesScale = 1;
+
+  function dodgeNoButton(){
+    var area = document.querySelector('.proposal-buttons-area');
+    var areaRect = area.getBoundingClientRect();
+    var btnRect = noBtn.getBoundingClientRect();
+    var maxX = Math.max(areaRect.width - btnRect.width, 0);
+    var maxY = Math.max(areaRect.height - btnRect.height, 0);
+    var newX = Math.random()*maxX;
+    var newY = Math.random()*maxY;
+    noBtn.style.position='absolute';
+    noBtn.style.left = newX+'px';
+    noBtn.style.top = newY+'px';
+    noBtn.style.right = 'auto';
+    noBtn.style.transform = 'none';
+    growYesButton();
+  }
+
+  function growYesButton(){
+    yesScale = Math.min(yesScale + 0.12, 2.4);
+    yesBtn.style.transform = 'translateY(-50%) scale('+yesScale+')';
+  }
+
+  noBtn.addEventListener('mouseenter', dodgeNoButton);
+  noBtn.addEventListener('touchstart', function(e){ e.preventDefault(); dodgeNoButton(); }, {passive:false});
+  noBtn.addEventListener('click', dodgeNoButton);
+
+  // On touchscreens there's no hover, so watch for a finger getting close
+  // to the button as it moves and dodge before it can actually land a tap.
+  var DODGE_MARGIN = 45;
+  document.addEventListener('touchmove', function(e){
+    if(!proposalOverlay.classList.contains('show')) return;
+    var touch = e.touches && e.touches[0];
+    if(!touch) return;
+    var rect = noBtn.getBoundingClientRect();
+    if(touch.clientX > rect.left - DODGE_MARGIN && touch.clientX < rect.right + DODGE_MARGIN &&
+       touch.clientY > rect.top - DODGE_MARGIN && touch.clientY < rect.bottom + DODGE_MARGIN){
+      dodgeNoButton();
+    }
+  }, {passive:true});
+
+  yesBtn.addEventListener('click', function(){
+    proposalOverlay.classList.remove('show');
+    celebrationOverlay.classList.add('show');
+    startConfetti();
+  });
+
+  var confettiInterval;
+  function spawnHeart(){
+    var heart = document.createElement('div');
+    heart.className='falling-heart';
+    var symbols = ['❤️','💖','💕','💍','✨'];
+    heart.textContent = symbols[Math.floor(Math.random()*symbols.length)];
+    heart.style.left = Math.random()*100+'vw';
+    heart.style.fontSize = (Math.random()*18+16)+'px';
+    heart.style.animationDuration = (Math.random()*2.5+3)+'s';
+    celebrationOverlay.appendChild(heart);
+    setTimeout(function(){ heart.remove(); }, 6000);
+  }
+  function startConfetti(){
+    if(confettiInterval) return;
+    confettiInterval = setInterval(spawnHeart, 180);
+  }
+
+  document.getElementById('replay-btn').addEventListener('click', function(){
+    location.reload();
+  });
+
+  function showProposal(){
+    proposalOverlay.classList.add('show');
+  }
+
+  function init(){
+    buildBoard();
+    buildKeyboard();
+    sleep(700)
+      .then(function(){ return revealRow(0, PRELOADED[0]); })
+      .then(function(){ return sleep(600); })
+      .then(function(){ return revealRow(1, PRELOADED[1]); })
+      .then(function(){
+        currentRow = 2;
+        inputEnabled = true;
+        showToast('Your turn 💭', 1500);
+      });
+  }
+
+  window.addEventListener('DOMContentLoaded', init);
+})();
+</script>
+</body>
+</html>
